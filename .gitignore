@@ -44,6 +44,12 @@ Thumbs.db
 *.db
 config.json
 
+!requirements.txt
+*.xlsx
+*.ipynb
+*.txt
+
+# Application specific
 *.xlsx
 *.txt
 *.ipynb 
