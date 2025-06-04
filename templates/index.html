@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consulta de CNPJ/CPF</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 800px;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .result-container {
+            margin-top: 20px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">Consulta de CNPJ/CPF</h1>
+        
+        <form id="searchForm">
+            <div class="mb-3">
+                <label class="form-label">Tipo de Consulta:</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="type" id="typeEmpresas" value="empresas" checked>
+                    <label class="form-check-label" for="typeEmpresas">
+                        Empresas
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="type" id="typePessoas" value="pessoas">
+                    <label class="form-check-label" for="typePessoas">
+                        Pessoas
+                    </label>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="cnpjs" class="form-label">Digite os CNPJs/CPFs (um por linha):</label>
+                <textarea class="form-control" id="cnpjs" name="cnpjs" rows="5" required></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Consultar</button>
+            <button type="button" class="btn btn-success" id="downloadExcel" style="display: none;">Download Excel</button>
+            <button type="button" class="btn btn-info" id="downloadJson" style="display: none;">Download JSON</button>
+            <button type="button" class="btn btn-warning" id="analyzeGPT" style="display: none;">Análise GPT</button>
+        </form>
+
+        <div id="resultContainer" class="result-container">
+            <h3>Resultados:</h3>
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Verificar se as credenciais estão configuradas
+        window.addEventListener('load', function() {
+            const config = localStorage.getItem('apiConfig');
+            if (!config) {
+                window.location.href = '/config';
+                return;
+            }
+        });
+
+        document.getElementById('searchForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const config = JSON.parse(localStorage.getItem('apiConfig'));
+            
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'X-BigData-TokenId': config.bigdataTokenId,
+                        'X-BigData-TokenHash': config.bigdataTokenHash,
+                        'X-OpenAI-Key': config.openaiApiKey
+                    },
+                    body: formData
+                });
+                
+                if (response.status === 401) {
+                    window.location.href = '/config';
+                    return;
+                }
+                
+                const data = await response.json();
+                displayResults(data);
+                
+                document.getElementById('downloadExcel').style.display = 'inline-block';
+                document.getElementById('downloadJson').style.display = 'inline-block';
+                document.getElementById('analyzeGPT').style.display = 'inline-block';
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('Erro ao realizar a consulta');
+            }
+        });
+
+        document.getElementById('downloadExcel').addEventListener('click', async () => {
+            const results = document.getElementById('results').dataset.results;
+            const config = JSON.parse(localStorage.getItem('apiConfig'));
+            
+            try {
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-BigData-TokenId': config.bigdataTokenId,
+                        'X-BigData-TokenHash': config.bigdataTokenHash,
+                        'X-OpenAI-Key': config.openaiApiKey
+                    },
+                    body: results
+                });
+                
+                if (response.status === 401) {
+                    window.location.href = '/config';
+                    return;
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'resultado_cnpjs.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('Erro ao baixar o arquivo Excel');
+            }
+        });
+
+        document.getElementById('downloadJson').addEventListener('click', async () => {
+            const results = document.getElementById('results').dataset.results;
+            const config = JSON.parse(localStorage.getItem('apiConfig'));
+            
+            try {
+                const response = await fetch('/download_json', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-BigData-TokenId': config.bigdataTokenId,
+                        'X-BigData-TokenHash': config.bigdataTokenHash,
+                        'X-OpenAI-Key': config.openaiApiKey
+                    },
+                    body: results
+                });
+                
+                if (response.status === 401) {
+                    window.location.href = '/config';
+                    return;
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'resultado_cnpjs.txt';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('Erro ao baixar o arquivo JSON');
+            }
+        });
+
+        document.getElementById('analyzeGPT').addEventListener('click', async () => {
+            const results = document.getElementById('results').dataset.results;
+            const config = JSON.parse(localStorage.getItem('apiConfig'));
+            
+            try {
+                const response = await fetch('/analyze_gpt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-BigData-TokenId': config.bigdataTokenId,
+                        'X-BigData-TokenHash': config.bigdataTokenHash,
+                        'X-OpenAI-Key': config.openaiApiKey
+                    },
+                    body: results
+                });
+                
+                if (response.status === 401) {
+                    window.location.href = '/config';
+                    return;
+                }
+                
+                const data = await response.json();
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    alert(data.analysis);
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('Erro ao realizar a análise GPT');
+            }
+        });
+
+        function displayResults(data) {
+            const container = document.getElementById('resultContainer');
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+            resultsDiv.dataset.results = JSON.stringify(data);
+
+            data.forEach((item, index) => {
+                if (item.error) {
+                    resultsDiv.innerHTML += `<div class="alert alert-danger">Erro na consulta: ${item.error}</div>`;
+                    return;
+                }
+
+                if (item.Result && item.Result.length > 0) {
+                    item.Result.forEach(result => {
+                        const bd = result.BasicData || {};
+                        const mainActivity = bd.Activities ? bd.Activities.find(a => a.IsMain)?.Activity : '';
+                        const cnae = bd.Activities ? bd.Activities.find(a => a.IsMain)?.CNAE : '';
+                        
+                        const card = document.createElement('div');
+                        card.className = 'card mb-3';
+                        card.innerHTML = `
+                            <div class="card-body">
+                                <h5 class="card-title">${bd.OfficialName || 'Nome não encontrado'}</h5>
+                                <p class="card-text">
+                                    <strong>CNPJ/CPF:</strong> ${bd.TaxIdNumber || 'Não encontrado'}<br>
+                                    <strong>Nome Fantasia:</strong> ${bd.TradeName || 'Não encontrado'}<br>
+                                    <strong>UF:</strong> ${bd.HeadquarterState || 'Não encontrado'}<br>
+                                    <strong>Situação:</strong> ${bd.TaxIdStatus || 'Não encontrado'}<br>
+                                    <strong>Regime Tributário:</strong> ${bd.TaxRegime || 'Não encontrado'}<br>
+                                    <strong>Capital:</strong> R$ ${bd.AdditionalOutputData?.CapitalRS || '0.00'}<br>
+                                    <strong>Data de Fundação:</strong> ${bd.FoundedDate ? bd.FoundedDate.substring(0, 10) : 'Não encontrado'}<br>
+                                    <strong>Atividade Principal:</strong> ${mainActivity || 'Não encontrado'}<br>
+                                    <strong>CNAE:</strong> ${cnae || 'Não encontrado'}<br>
+                                    <strong>Número de Processos:</strong> ${result.Processes?.length || 0}<br>
+                                    <strong>Sanções CNJ:</strong> ${result.KYC?.Sanctions?.length || 0}
+                                </p>
+                            </div>
+                        `;
+                        resultsDiv.appendChild(card);
+                    });
+                } else {
+                    resultsDiv.innerHTML += `<div class="alert alert-warning">Nenhum resultado encontrado</div>`;
+                }
+            });
+
+            container.style.display = 'block';
+        }
+    </script>
+</body>
+</html> 

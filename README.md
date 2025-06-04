@@ -1,69 +1,68 @@
-# Consulta de CNPJs - Big Data Corp
+# Consulta de CNPJ/CPF
 
-Esta é uma aplicação web para consultar dados de CNPJs utilizando a API da Big Data Corp.
+Aplicação web para consulta de CNPJs e CPFs utilizando a API da BigData Corp.
 
 ## Funcionalidades
 
-- Interface web amigável para inserção de CNPJs
-- Consulta em massa de CNPJs
-- Visualização dos resultados em formato JSON
-- Download dos resultados em formato Excel
-- Suporte a múltiplos CNPJs (um por linha)
+- Consulta de CNPJs e CPFs
+- Exportação dos resultados em Excel e JSON
+- Análise de risco utilizando GPT
+- Interface amigável e responsiva
+- Armazenamento seguro das credenciais
 
 ## Requisitos
 
-- Python 3.8 ou superior
-- pip (gerenciador de pacotes Python)
+- Python 3.9+
+- Flask
+- Requests
+- Pandas
+- OpenAI
 
 ## Instalação
 
-1. Clone este repositório ou baixe os arquivos
-2. Crie um ambiente virtual (recomendado):
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # No Windows: venv\Scripts\activate
-   ```
-3. Instale as dependências:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. Clone o repositório:
+```bash
+git clone https://github.com/seu-usuario/find_cnpj.git
+cd find_cnpj
+```
 
-## Executando a aplicação
+2. Instale as dependências:
+```bash
+pip install -r requirements.txt
+```
 
-1. Ative o ambiente virtual (se ainda não estiver ativo):
-   ```bash
-   source venv/bin/activate  # No Windows: venv\Scripts\activate
-   ```
-2. Execute a aplicação:
-   ```bash
-   python app.py
-   ```
-3. Abra seu navegador e acesse:
-   ```
-   http://localhost:5000
-   ```
+3. Execute a aplicação:
+```bash
+python app.py
+```
+
+## Configuração
+
+Ao acessar a aplicação pela primeira vez, você será redirecionado para a página de configuração onde deverá inserir:
+
+- BigData Token ID
+- BigData Token Hash
+- OpenAI API Key
+
+As credenciais são armazenadas localmente no seu navegador e não são enviadas para o servidor.
 
 ## Uso
 
-1. Na página inicial, insira os CNPJs que deseja consultar (um por linha)
-2. Clique no botão "Consultar"
-3. Aguarde o resultado da consulta
-4. Visualize os dados em formato JSON
-5. Clique no botão "Baixar Excel" para exportar os resultados
+1. Acesse a aplicação no navegador
+2. Escolha entre consulta de Empresas ou Pessoas
+3. Insira os CNPJs/CPFs (um por linha)
+4. Clique em Consultar
+5. Utilize os botões para:
+   - Download em Excel
+   - Download em JSON
+   - Análise GPT
 
-## Estrutura do Projeto
+## Segurança
 
-```
-.
-├── app.py              # Aplicação Flask
-├── requirements.txt    # Dependências do projeto
-├── templates/         # Templates HTML
-│   └── index.html     # Página principal
-└── README.md          # Este arquivo
-```
+- Credenciais armazenadas localmente
+- Sem exposição de dados sensíveis
+- Proteção contra commit acidental de credenciais
 
-## Observações
+## Licença
 
-- Os CNPJs podem ser inseridos com ou sem formatação (pontos e traços)
-- A aplicação suporta consulta de múltiplos CNPJs simultaneamente
-- Os resultados são exibidos em formato JSON e podem ser exportados para Excel 
+MIT 
