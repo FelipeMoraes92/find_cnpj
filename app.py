@@ -62,9 +62,7 @@ def search():
             bdc_data = fetch_bdc_data(
                 document_number=cnpj_sanitizado,
                 url=endpoint,
-                dataset="""basic_data,
-               processes.filter(partypolarity = PASSIVE),
-               kyc.filter(standardized_type, standardized_sanction_type, type, sanctions_source = Conselho Nacional de Justiça)""",
+                dataset="registration_data",
                 token_hash=bigdata_token_hash,
                 token_id=bigdata_token_id
             )
@@ -87,36 +85,25 @@ def download():
             continue
 
         for result in item["Result"]:
-            bd = result.get("BasicData", {})
-            main_activity = ""
-            cnae_code = ""
-            if "Activities" in bd:
-                main = next((a for a in bd["Activities"] if a.get("IsMain")), {})
-                main_activity = main.get("Activity", "")
-                # Format CNAE code
-                cnae_code = main.get("CNAE", "")
-                if cnae_code:
-                    # Remove any non-digit characters and pad with zeros if needed
-                    cnae_code = re.sub(r'\D', '', cnae_code)
-                    cnae_code = cnae_code.zfill(7)  # Ensure 7 digits
-
-            # Adicionando informações de processos e KYC
-            processes = result.get("Processes", [])
-            kyc_data = result.get("KYC", {})
+            rd = result.get("RegistrationData", {})
             
             record = {
-                "CNPJ": bd.get("TaxIdNumber"),
-                "Razão Social": bd.get("OfficialName"),
-                "Nome Fantasia": bd.get("TradeName", ""),
-                "UF": bd.get("HeadquarterState"),
-                "Situação": bd.get("TaxIdStatus"),
-                "Regime Tributário": bd.get("TaxRegime"),
-                "Capital (R$)": float(bd.get("AdditionalOutputData", {}).get("CapitalRS", 0.0)),
-                "Data de Fundação": bd.get("FoundedDate", "")[:10],
-                "Atividade Principal": main_activity,
-                "CNAE": cnae_code,
-                "Número de Processos Passivos": len(processes),
-                "Sanções CNJ": len(kyc_data.get("Sanctions", [])) if kyc_data else 0
+                "CNPJ": rd.get("TaxIdNumber"),
+                "Razão Social": rd.get("OfficialName"),
+                "Nome Fantasia": rd.get("TradeName", ""),
+                "UF": rd.get("HeadquarterState"),
+                "Situação": rd.get("TaxIdStatus"),
+                "Regime Tributário": rd.get("TaxRegime"),
+                "Capital (R$)": float(rd.get("CapitalRS", 0.0)),
+                "Data de Fundação": rd.get("FoundedDate", "")[:10],
+                "Natureza Jurídica": rd.get("LegalNature"),
+                "Porte": rd.get("CompanySize"),
+                "Endereço": rd.get("Address"),
+                "Bairro": rd.get("Neighborhood"),
+                "Cidade": rd.get("City"),
+                "CEP": rd.get("ZipCode"),
+                "Telefone": rd.get("Phone"),
+                "Email": rd.get("Email")
             }
             
             records.append(record)
