@@ -3,7 +3,7 @@ services:
     name: find-cnpj
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn app:app --config gunicorn_config.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
@@ -12,4 +12,6 @@ services:
       - key: BIGDATA_TOKEN_HASH
         sync: false
       - key: OPENAI_API_KEY
-        sync: false 
+        sync: false
+    healthCheckPath: /
+    autoDeploy: true 
