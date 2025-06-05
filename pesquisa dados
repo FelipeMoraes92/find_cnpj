@@ -1,0 +1,54 @@
+import requests
+
+# Lista de nomes para consulta
+nomes = ["Maria Oliveira", "João da Silva", "Pedro Souza", "Nome Inventado"]
+
+# Token da API BigDataCorp
+ACCESS_TOKEN = "SEU_ACCESS_TOKEN_AQUI"
+
+# URL da API
+BASE_URL = "https://plataforma.bigdatacorp.com.br/pessoas"
+
+# Armazenar os resultados válidos
+resultados = []
+
+for nome in nomes:
+    params = {
+        "q": f"name{{{nome}}}",
+        "Datasets": "basic_data",
+        "AccessToken": ACCESS_TOKEN,
+        "Limit": 5  # limitar a até 5 resultados
+    }
+
+    try:
+        response = requests.get(BASE_URL, params=params, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"[ERRO] Falha na requisição para '{nome}': {e}")
+        continue
+
+    data = response.json()
+    pessoas = data.get("Result", [])
+
+    if not pessoas:
+        print(f"[INFO] Nenhum resultado para '{nome}'.")
+        continue
+
+    cpfs = []
+    for pessoa in pessoas:
+        cpf = pessoa.get("doc") or pessoa.get("CPF")
+        if cpf:
+            cpfs.append(cpf)
+
+    resultados.append({
+        "nome": nome,
+        "cpfs_encontrados": cpfs
+    })
+
+# Exibir os resultados
+print("\n=== Resultados ===\n")
+for r in resultados:
+    print(f"Nome: {r['nome']} — {len(r['cpfs_encontrados'])} CPF(s):")
+    for cpf in r['cpfs_encontrados']:
+        print(f"  - {cpf}")
+    print()
