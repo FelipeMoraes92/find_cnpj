@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consulta CNPJ</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .loading {
+            display: none;
+            margin: 20px 0;
+        }
+        .error {
+            color: red;
+            margin: 10px 0;
+        }
+        .success {
+            color: green;
+            margin: 10px 0;
+        }
+        #resultTable {
+            margin-top: 20px;
+        }
+        .table-responsive {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        #jsonView {
+            display: none;
+            margin-top: 20px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+        }
+        #jsonContent {
+            background-color: #ffffff;
+            border: 1px solid #ced4da;
+            border-radius: 3px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4">Consulta CNPJ</h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="cnpjs">CNPJs (um por linha):</label>
+                    <textarea class="form-control" id="cnpjs" rows="5"></textarea>
+                </div>
+                
+                <div class="form-group mt-3">
+                    <label>Tipo de Busca:</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="type" id="typeEmpresas" value="empresas" checked>
+                        <label class="form-check-label" for="typeEmpresas">
+                            Empresas
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="type" id="typePessoas" value="pessoas">
+                        <label class="form-check-label" for="typePessoas">
+                            Pessoas
+                        </label>
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary mt-3" onclick="search()">Buscar</button>
+                <button class="btn btn-success mt-3" onclick="downloadExcel()" id="downloadBtn" style="display: none;">Download Excel</button>
+                <button class="btn btn-info mt-3" onclick="downloadJson()" id="downloadJsonBtn" style="display: none;">Download JSON</button>
+                <button class="btn btn-warning mt-3" onclick="toggleJsonView()" id="toggleJsonBtn" style="display: none;">Mostrar JSON</button>
+                <button class="btn btn-secondary mt-3" onclick="window.location.href='/config'">Configurações</button>
+            </div>
+        </div>
+
+        <div class="loading">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Carregando...</span>
+            </div>
+            <span class="ms-2">Buscando dados...</span>
+        </div>
+
+        <div class="error" id="error"></div>
+        <div class="success" id="success"></div>
+
+        <div class="table-responsive" id="resultTable" style="display: none;">
+            <table class="table table-striped table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>CNPJ</th>
+                        <th>Razão Social</th>
+                        <th>Nome Fantasia</th>
+                        <th>UF</th>
+                        <th>Situação</th>
+                        <th>Regime Tributário</th>
+                        <th>Capital (R$)</th>
+                        <th>Data de Fundação</th>
+                        <th>Natureza Jurídica</th>
+                        <th>Porte</th>
+                        <th>Endereço</th>
+                        <th>Bairro</th>
+                        <th>Cidade</th>
+                        <th>CEP</th>
+                        <th>Telefone</th>
+                        <th>Email</th>
+                    </tr>
+                </thead>
+                <tbody id="resultBody">
+                </tbody>
+            </table>
+        </div>
+
+        <div id="jsonView">
+            <h4>Dados JSON Brutos</h4>
+            <div id="jsonContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let searchResults = [];
+
+        function search() {
+            const cnpjs = document.getElementById('cnpjs').value;
+            const type = document.querySelector('input[name="type"]:checked').value;
+            
+            if (!cnpjs.trim()) {
+                showError('Por favor, insira pelo menos um CNPJ');
+                return;
+            }
+
+            // Obter credenciais do localStorage
+            const bigdataTokenId = localStorage.getItem('bigdataTokenId');
+            const bigdataTokenHash = localStorage.getItem('bigdataTokenHash');
+            const openaiApiKey = localStorage.getItem('openaiApiKey');
+
+            if (!bigdataTokenId || !bigdataTokenHash || !openaiApiKey) {
+                showError('Por favor, configure as credenciais primeiro');
+                return;
+            }
+
+            showLoading();
+            hideError();
+            hideSuccess();
+
+            const formData = new FormData();
+            formData.append('cnpjs', cnpjs);
+            formData.append('type', type);
+
+            fetch('/search', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-BigData-TokenId': bigdataTokenId,
+                    'X-BigData-TokenHash': bigdataTokenHash,
+                    'X-OpenAI-Key': openaiApiKey
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                hideLoading();
+                searchResults = data;
+                displayResults(data);
+                document.getElementById('downloadBtn').style.display = 'inline-block';
+                document.getElementById('downloadJsonBtn').style.display = 'inline-block';
+                document.getElementById('toggleJsonBtn').style.display = 'inline-block';
+            })
+            .catch(error => {
+                hideLoading();
+                console.error('Erro detalhado:', error);
+                showError('Erro ao buscar dados: ' + error.message);
+            });
+        }
+
+        function displayResults(data) {
+            const tbody = document.getElementById('resultBody');
+            tbody.innerHTML = '';
+            
+            if (!Array.isArray(data)) {
+                showError('Formato de dados inválido recebido do servidor');
+                return;
+            }
+            
+            data.forEach(item => {
+                if (item.Result && Array.isArray(item.Result) && item.Result.length > 0) {
+                    item.Result.forEach(result => {
+                        // Verificar se RegistrationData existe e tem dados
+                        const rd = result.RegistrationData || result.registrationData || {};
+                        
+                        if (!rd || Object.keys(rd).length === 0) {
+                            // Se não há dados de registro, mostrar erro
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td colspan="16" class="text-center text-danger">
+                                    Erro: Dados não encontrados para este CNPJ
+                                </td>
+                            `;
+                            tbody.appendChild(row);
+                            return;
+                        }
+                        
+                        const row = document.createElement('tr');
+                        
+                        row.innerHTML = `
+                            <td>${rd.TaxIdNumber || rd.taxIdNumber || ''}</td>
+                            <td>${rd.OfficialName || rd.officialName || ''}</td>
+                            <td>${rd.TradeName || rd.tradeName || ''}</td>
+                            <td>${rd.HeadquarterState || rd.headquarterState || ''}</td>
+                            <td>${rd.TaxIdStatus || rd.taxIdStatus || ''}</td>
+                            <td>${rd.TaxRegime || rd.taxRegime || ''}</td>
+                            <td>${rd.CapitalRS ? 'R$ ' + parseFloat(rd.CapitalRS).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : ''}</td>
+                            <td>${rd.FoundedDate ? rd.FoundedDate.substring(0, 10) : ''}</td>
+                            <td>${rd.LegalNature || rd.legalNature || ''}</td>
+                            <td>${rd.CompanySize || rd.companySize || ''}</td>
+                            <td>${rd.Address || rd.address || ''}</td>
+                            <td>${rd.Neighborhood || rd.neighborhood || ''}</td>
+                            <td>${rd.City || rd.city || ''}</td>
+                            <td>${rd.ZipCode || rd.zipCode || ''}</td>
+                            <td>${rd.Phone || rd.phone || ''}</td>
+                            <td>${rd.Email || rd.email || ''}</td>
+                        `;
+                        
+                        tbody.appendChild(row);
+                    });
+                } else if (item.error) {
+                    // Se há erro específico para este item
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td colspan="16" class="text-center text-danger">
+                            Erro: ${item.error}
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                } else {
+                    // Se não há resultados para este item
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td colspan="16" class="text-center text-warning">
+                            Nenhum resultado encontrado
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                }
+            });
+            
+            document.getElementById('resultTable').style.display = 'block';
+            
+            // Mostrar mensagem de sucesso
+            const totalResults = data.filter(item => item.Result && item.Result.length > 0).length;
+            if (totalResults > 0) {
+                showSuccess(`Consulta realizada com sucesso! ${totalResults} CNPJ(s) encontrado(s).`);
+            }
+        }
+
+        function downloadExcel() {
+            if (!searchResults.length) {
+                showError('Nenhum resultado para download');
+                return;
+            }
+
+            fetch('/download', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-BigData-TokenId': localStorage.getItem('bigdataTokenId'),
+                    'X-BigData-TokenHash': localStorage.getItem('bigdataTokenHash'),
+                    'X-OpenAI-Key': localStorage.getItem('openaiApiKey')
+                },
+                body: JSON.stringify(searchResults)
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'resultado_cnpjs.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            })
+            .catch(error => {
+                showError('Erro ao fazer download: ' + error.message);
+            });
+        }
+
+        function downloadJson() {
+            if (!searchResults.length) {
+                showError('Nenhum resultado para download');
+                return;
+            }
+
+            fetch('/download_json', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-BigData-TokenId': localStorage.getItem('bigdataTokenId'),
+                    'X-BigData-TokenHash': localStorage.getItem('bigdataTokenHash'),
+                    'X-OpenAI-Key': localStorage.getItem('openaiApiKey')
+                },
+                body: JSON.stringify(searchResults)
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'resultado_cnpjs.json';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            })
+            .catch(error => {
+                showError('Erro ao fazer download: ' + error.message);
+            });
+        }
+
+        function showLoading() {
+            document.querySelector('.loading').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.querySelector('.loading').style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+        }
+
+        function hideSuccess() {
+            document.getElementById('success').style.display = 'none';
+        }
+
+        function toggleJsonView() {
+            const jsonView = document.getElementById('jsonView');
+            const toggleBtn = document.getElementById('toggleJsonBtn');
+            const jsonContent = document.getElementById('jsonContent');
+            
+            if (jsonView.style.display === 'none') {
+                jsonView.style.display = 'block';
+                jsonContent.textContent = JSON.stringify(searchResults, null, 2);
+                toggleBtn.textContent = 'Ocultar JSON';
+                toggleBtn.className = 'btn btn-warning mt-3';
+            } else {
+                jsonView.style.display = 'none';
+                toggleBtn.textContent = 'Mostrar JSON';
+                toggleBtn.className = 'btn btn-warning mt-3';
+            }
+        }
+    </script>
+</body>
+</html> 
