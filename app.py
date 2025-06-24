@@ -26,9 +26,18 @@ def fetch_bdc_data(document_number, url, dataset, token_hash, token_id):
         "q": f"doc{{{document_number}}}",
         "Datasets": dataset
     }
+    
+    print(f"Fazendo requisição para: {url}")
+    print(f"Payload: {payload}")
+    
     response = requests.post(url, json=payload, headers=headers)
     response.raise_for_status()
-    return response.json()
+    
+    data = response.json()
+    print(f"Resposta recebida para CNPJ {document_number}: {type(data)}")
+    print(f"Estrutura da resposta: {list(data.keys()) if isinstance(data, dict) else 'Não é dict'}")
+    
+    return data
 
 @app.route('/config')
 def config():
@@ -40,40 +49,51 @@ def index():
 
 @app.route('/search', methods=['POST'])
 def search():
-    # Obter credenciais do localStorage via JavaScript
-    cnpjs = request.form.get('cnpjs', '').split('\n')
-    cnpjs = [cnpj.strip() for cnpj in cnpjs if cnpj.strip()]
-    search_type = request.form.get('type', 'empresas')
-    
-    # Obter credenciais do header da requisição
-    bigdata_token_id = request.headers.get('X-BigData-TokenId')
-    bigdata_token_hash = request.headers.get('X-BigData-TokenHash')
-    openai_api_key = request.headers.get('X-OpenAI-Key')
-    
-    if not all([bigdata_token_id, bigdata_token_hash, openai_api_key]):
-        return jsonify({"error": "Credenciais não configuradas"}), 401
-    
-    resultados = []
-    for cnpj in cnpjs:
-        cnpj_sanitizado = re.sub(r'\D', '', cnpj)
-        try:
-            endpoint = "https://plataforma.bigdatacorp.com.br/empresas" if search_type == "empresas" else "https://plataforma.bigdatacorp.com.br/pessoas"
-            
-            bdc_data = fetch_bdc_data(
-                document_number=cnpj_sanitizado,
-                url=endpoint,
-                dataset="registration_data",
-                token_hash=bigdata_token_hash,
-                token_id=bigdata_token_id
-            )
-            resultados.append(bdc_data)
-        except Exception as e:
-            resultados.append({
-                "document_number": cnpj_sanitizado,
-                "error": str(e)
-            })
-    
-    return jsonify(resultados)
+    try:
+        # Obter credenciais do localStorage via JavaScript
+        cnpjs = request.form.get('cnpjs', '').split('\n')
+        cnpjs = [cnpj.strip() for cnpj in cnpjs if cnpj.strip()]
+        search_type = request.form.get('type', 'empresas')
+        
+        # Obter credenciais do header da requisição
+        bigdata_token_id = request.headers.get('X-BigData-TokenId')
+        bigdata_token_hash = request.headers.get('X-BigData-TokenHash')
+        openai_api_key = request.headers.get('X-OpenAI-Key')
+        
+        if not all([bigdata_token_id, bigdata_token_hash, openai_api_key]):
+            return jsonify({"error": "Credenciais não configuradas"}), 401
+        
+        if not cnpjs:
+            return jsonify({"error": "Nenhum CNPJ fornecido"}), 400
+        
+        resultados = []
+        for cnpj in cnpjs:
+            cnpj_sanitizado = re.sub(r'\D', '', cnpj)
+            try:
+                endpoint = "https://plataforma.bigdatacorp.com.br/empresas" if search_type == "empresas" else "https://plataforma.bigdatacorp.com.br/pessoas"
+                
+                bdc_data = fetch_bdc_data(
+                    document_number=cnpj_sanitizado,
+                    url=endpoint,
+                    dataset="registration_data",
+                    token_hash=bigdata_token_hash,
+                    token_id=bigdata_token_id
+                )
+                resultados.append(bdc_data)
+            except requests.exceptions.RequestException as e:
+                resultados.append({
+                    "document_number": cnpj_sanitizado,
+                    "error": f"Erro de conexão: {str(e)}"
+                })
+            except Exception as e:
+                resultados.append({
+                    "document_number": cnpj_sanitizado,
+                    "error": f"Erro inesperado: {str(e)}"
+                })
+        
+        return jsonify(resultados)
+    except Exception as e:
+        return jsonify({"error": f"Erro interno do servidor: {str(e)}"}), 500
 
 @app.route('/download', methods=['POST'])
 def download():
@@ -85,28 +105,36 @@ def download():
             continue
 
         for result in item["Result"]:
-            rd = result.get("RegistrationData", {})
+            # Verificar se RegistrationData existe e acessar corretamente
+            rd = result.get("RegistrationData", {}) or result.get("registrationData", {})
+            
+            if not rd:
+                # Se não há dados de registro, pular este item
+                continue
             
             record = {
-                "CNPJ": rd.get("TaxIdNumber"),
-                "Razão Social": rd.get("OfficialName"),
-                "Nome Fantasia": rd.get("TradeName", ""),
-                "UF": rd.get("HeadquarterState"),
-                "Situação": rd.get("TaxIdStatus"),
-                "Regime Tributário": rd.get("TaxRegime"),
+                "CNPJ": rd.get("TaxIdNumber") or rd.get("taxIdNumber"),
+                "Razão Social": rd.get("OfficialName") or rd.get("officialName"),
+                "Nome Fantasia": rd.get("TradeName") or rd.get("tradeName"),
+                "UF": rd.get("HeadquarterState") or rd.get("headquarterState"),
+                "Situação": rd.get("TaxIdStatus") or rd.get("taxIdStatus"),
+                "Regime Tributário": rd.get("TaxRegime") or rd.get("taxRegime"),
                 "Capital (R$)": float(rd.get("CapitalRS", 0.0)),
-                "Data de Fundação": rd.get("FoundedDate", "")[:10],
-                "Natureza Jurídica": rd.get("LegalNature"),
-                "Porte": rd.get("CompanySize"),
-                "Endereço": rd.get("Address"),
-                "Bairro": rd.get("Neighborhood"),
-                "Cidade": rd.get("City"),
-                "CEP": rd.get("ZipCode"),
-                "Telefone": rd.get("Phone"),
-                "Email": rd.get("Email")
+                "Data de Fundação": (rd.get("FoundedDate") or "")[:10],
+                "Natureza Jurídica": rd.get("LegalNature") or rd.get("legalNature"),
+                "Porte": rd.get("CompanySize") or rd.get("companySize"),
+                "Endereço": rd.get("Address") or rd.get("address"),
+                "Bairro": rd.get("Neighborhood") or rd.get("neighborhood"),
+                "Cidade": rd.get("City") or rd.get("city"),
+                "CEP": rd.get("ZipCode") or rd.get("zipCode"),
+                "Telefone": rd.get("Phone") or rd.get("phone"),
+                "Email": rd.get("Email") or rd.get("email")
             }
             
             records.append(record)
+
+    if not records:
+        return jsonify({"error": "Nenhum dado válido encontrado para download"}), 400
 
     df = pd.DataFrame(records)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -172,17 +200,22 @@ def analyze_gpt():
         for item in data:
             if "Result" in item and item["Result"]:
                 for result in item["Result"]:
-                    bd = result.get("BasicData", {})
+                    # Verificar se RegistrationData existe e acessar corretamente
+                    rd = result.get("RegistrationData", {}) or result.get("registrationData", {})
+                    
+                    if not rd:
+                        continue
+                    
                     simplified_data.append({
-                        "CNPJ": bd.get("TaxIdNumber"),
-                        "Razão Social": bd.get("OfficialName"),
-                        "Nome Fantasia": bd.get("TradeName"),
-                        "UF": bd.get("HeadquarterState"),
-                        "Situação": bd.get("TaxIdStatus"),
-                        "Regime Tributário": bd.get("TaxRegime"),
-                        "Capital": bd.get("AdditionalOutputData", {}).get("CapitalRS"),
-                        "Data de Fundação": bd.get("FoundedDate"),
-                        "Atividades": [a.get("Activity") for a in bd.get("Activities", []) if a.get("IsMain")],
+                        "CNPJ": rd.get("TaxIdNumber") or rd.get("taxIdNumber"),
+                        "Razão Social": rd.get("OfficialName") or rd.get("officialName"),
+                        "Nome Fantasia": rd.get("TradeName") or rd.get("tradeName"),
+                        "UF": rd.get("HeadquarterState") or rd.get("headquarterState"),
+                        "Situação": rd.get("TaxIdStatus") or rd.get("taxIdStatus"),
+                        "Regime Tributário": rd.get("TaxRegime") or rd.get("taxRegime"),
+                        "Capital": rd.get("CapitalRS"),
+                        "Data de Fundação": rd.get("FoundedDate"),
+                        "Atividades": [a.get("Activity") for a in (rd.get("Activities") or []) if a.get("IsMain")],
                         "Processos": len(result.get("Processes", [])),
                         "Sanções": len(result.get("KYC", {}).get("Sanctions", []))
                     })

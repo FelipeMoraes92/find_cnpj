@@ -25,6 +25,25 @@
             max-height: 600px;
             overflow-y: auto;
         }
+        #jsonView {
+            display: none;
+            margin-top: 20px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+        }
+        #jsonContent {
+            background-color: #ffffff;
+            border: 1px solid #ced4da;
+            border-radius: 3px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
@@ -57,6 +76,7 @@
                 <button class="btn btn-primary mt-3" onclick="search()">Buscar</button>
                 <button class="btn btn-success mt-3" onclick="downloadExcel()" id="downloadBtn" style="display: none;">Download Excel</button>
                 <button class="btn btn-info mt-3" onclick="downloadJson()" id="downloadJsonBtn" style="display: none;">Download JSON</button>
+                <button class="btn btn-warning mt-3" onclick="toggleJsonView()" id="toggleJsonBtn" style="display: none;">Mostrar JSON</button>
                 <button class="btn btn-secondary mt-3" onclick="window.location.href='/config'">Configurações</button>
             </div>
         </div>
@@ -96,6 +116,11 @@
                 <tbody id="resultBody">
                 </tbody>
             </table>
+        </div>
+
+        <div id="jsonView">
+            <h4>Dados JSON Brutos</h4>
+            <div id="jsonContent"></div>
         </div>
     </div>
 
@@ -138,16 +163,23 @@
                     'X-OpenAI-Key': openaiApiKey
                 }
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 hideLoading();
                 searchResults = data;
                 displayResults(data);
                 document.getElementById('downloadBtn').style.display = 'inline-block';
                 document.getElementById('downloadJsonBtn').style.display = 'inline-block';
+                document.getElementById('toggleJsonBtn').style.display = 'inline-block';
             })
             .catch(error => {
                 hideLoading();
+                console.error('Erro detalhado:', error);
                 showError('Erro ao buscar dados: ' + error.message);
             });
         }
@@ -156,37 +188,80 @@
             const tbody = document.getElementById('resultBody');
             tbody.innerHTML = '';
             
+            if (!Array.isArray(data)) {
+                showError('Formato de dados inválido recebido do servidor');
+                return;
+            }
+            
             data.forEach(item => {
-                if (item.Result && item.Result.length > 0) {
+                if (item.Result && Array.isArray(item.Result) && item.Result.length > 0) {
                     item.Result.forEach(result => {
-                        const rd = result.RegistrationData || {};
+                        // Verificar se RegistrationData existe e tem dados
+                        const rd = result.RegistrationData || result.registrationData || {};
+                        
+                        if (!rd || Object.keys(rd).length === 0) {
+                            // Se não há dados de registro, mostrar erro
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td colspan="16" class="text-center text-danger">
+                                    Erro: Dados não encontrados para este CNPJ
+                                </td>
+                            `;
+                            tbody.appendChild(row);
+                            return;
+                        }
+                        
                         const row = document.createElement('tr');
                         
                         row.innerHTML = `
-                            <td>${rd.TaxIdNumber || ''}</td>
-                            <td>${rd.OfficialName || ''}</td>
-                            <td>${rd.TradeName || ''}</td>
-                            <td>${rd.HeadquarterState || ''}</td>
-                            <td>${rd.TaxIdStatus || ''}</td>
-                            <td>${rd.TaxRegime || ''}</td>
+                            <td>${rd.TaxIdNumber || rd.taxIdNumber || ''}</td>
+                            <td>${rd.OfficialName || rd.officialName || ''}</td>
+                            <td>${rd.TradeName || rd.tradeName || ''}</td>
+                            <td>${rd.HeadquarterState || rd.headquarterState || ''}</td>
+                            <td>${rd.TaxIdStatus || rd.taxIdStatus || ''}</td>
+                            <td>${rd.TaxRegime || rd.taxRegime || ''}</td>
                             <td>${rd.CapitalRS ? 'R$ ' + parseFloat(rd.CapitalRS).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : ''}</td>
                             <td>${rd.FoundedDate ? rd.FoundedDate.substring(0, 10) : ''}</td>
-                            <td>${rd.LegalNature || ''}</td>
-                            <td>${rd.CompanySize || ''}</td>
-                            <td>${rd.Address || ''}</td>
-                            <td>${rd.Neighborhood || ''}</td>
-                            <td>${rd.City || ''}</td>
-                            <td>${rd.ZipCode || ''}</td>
-                            <td>${rd.Phone || ''}</td>
-                            <td>${rd.Email || ''}</td>
+                            <td>${rd.LegalNature || rd.legalNature || ''}</td>
+                            <td>${rd.CompanySize || rd.companySize || ''}</td>
+                            <td>${rd.Address || rd.address || ''}</td>
+                            <td>${rd.Neighborhood || rd.neighborhood || ''}</td>
+                            <td>${rd.City || rd.city || ''}</td>
+                            <td>${rd.ZipCode || rd.zipCode || ''}</td>
+                            <td>${rd.Phone || rd.phone || ''}</td>
+                            <td>${rd.Email || rd.email || ''}</td>
                         `;
                         
                         tbody.appendChild(row);
                     });
+                } else if (item.error) {
+                    // Se há erro específico para este item
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td colspan="16" class="text-center text-danger">
+                            Erro: ${item.error}
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                } else {
+                    // Se não há resultados para este item
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td colspan="16" class="text-center text-warning">
+                            Nenhum resultado encontrado
+                        </td>
+                    `;
+                    tbody.appendChild(row);
                 }
             });
             
             document.getElementById('resultTable').style.display = 'block';
+            
+            // Mostrar mensagem de sucesso
+            const totalResults = data.filter(item => item.Result && item.Result.length > 0).length;
+            if (totalResults > 0) {
+                showSuccess(`Consulta realizada com sucesso! ${totalResults} CNPJ(s) encontrado(s).`);
+            }
         }
 
         function downloadExcel() {
@@ -279,6 +354,23 @@
 
         function hideSuccess() {
             document.getElementById('success').style.display = 'none';
+        }
+
+        function toggleJsonView() {
+            const jsonView = document.getElementById('jsonView');
+            const toggleBtn = document.getElementById('toggleJsonBtn');
+            const jsonContent = document.getElementById('jsonContent');
+            
+            if (jsonView.style.display === 'none') {
+                jsonView.style.display = 'block';
+                jsonContent.textContent = JSON.stringify(searchResults, null, 2);
+                toggleBtn.textContent = 'Ocultar JSON';
+                toggleBtn.className = 'btn btn-warning mt-3';
+            } else {
+                jsonView.style.display = 'none';
+                toggleBtn.textContent = 'Mostrar JSON';
+                toggleBtn.className = 'btn btn-warning mt-3';
+            }
         }
     </script>
 </body>
